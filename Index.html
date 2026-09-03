@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expansión On-Demand | FEMSA Retail</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root {
+            --femsa-red: #E31837;
+            --femsa-dark: #1E1E1E;
+            --bg-light: #F4F6F9;
+            --card-bg: #FFFFFF;
+            --text-main: #2C3E50;
+            --text-muted: #7F8C8D;
+            --accent-green: #2ECC71;
+            --accent-orange: #F39C12;
+            --border-color: #E2E8F0;
+        }
+ 
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+        body { background-color: var(--bg-light); color: var(--text-main); display: flex; height: 100vh; overflow: hidden; justify-content: center; align-items: center; position: relative; }
+ 
+        /* CONTENEDOR VIEWPORT DE LA APLICACIÓN */
+        #app-viewport {
+            display: flex;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-light);
+            overflow: hidden;
+            position: relative;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        /* MODO SIMULADOR MÓVIL EN ESCRITORIO */
+        body.mobile-mode {
+            background-color: #0F172A;
+        }
+
+        body.mobile-mode #app-viewport {
+            width: 390px;
+            height: 800px;
+            border-radius: 48px;
+            border: 12px solid #1E293B;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 2px #334155;
+            position: relative;
+            flex-direction: column !important;
+        }
+
+        /* ISLA DINÁMICA DEL MOCKUP */
+        .dynamic-island {
+            display: none;
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100px;
+            height: 24px;
+            background: #000;
+            border-radius: 20px;
+            z-index: 99999;
+            pointer-events: none;
+        }
+        body.mobile-mode .dynamic-island { display: block; }
+
+        .sidebar { width: 260px; background-color: var(--femsa-dark); color: #FFF; display: flex; flex-direction: column; padding: 20px 0; z-index: 10; flex-shrink: 0; }
+        .brand-header { padding: 0 20px 20px; border-bottom: 1px solid #333; display: flex; align-items: center; gap: 12px; }
+        .brand-header i { font-size: 24px; color: var(--femsa-red); }
+        .brand-header h2 { font-size: 17px; font-weight: 700; }
+       
+        .menu-list { list-style: none; margin-top: 15px; }
+        .menu-item { padding: 14px 20px; display: flex; align-items: center; gap: 12px; cursor: pointer; transition: all 0.2s; color: #A0AEC0; font-weight: 500; font-size: 14px; }
+        .menu-item:hover, .menu-item.active { background-color: #2D3748; color: #FFF; border-left: 4px solid var(--femsa-red); }
+ 
+        /* BOTÓN DE SWITCH PERMANENTE FUERA DEL MOCKUP */
+        .floating-switch-container {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            z-index: 999999;
+            background: rgba(30, 41, 59, 0.95);
+            backdrop-filter: blur(8px);
+            padding: 10px 16px;
+            border-radius: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: #FFF;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .ios-switch { position: relative; display: inline-block; width: 42px; height: 22px; }
+        .ios-switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #475569; transition: .3s; border-radius: 22px; }
+        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        input:checked + .slider { background-color: var(--femsa-red); }
+        input:checked + .slider:before { transform: translateX(20px); }
+
+        .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; position: relative; height: 100%; width: 100%; }
+        
+        .scrollable-area {
+            flex: 1;
+            overflow-y: auto;
+            position: relative;
+            width: 100%;
+            order: 2;
+        }
+       
+        /* BANNER SUPERIOR / TOP NAVBAR */
+        .top-navbar {
+            background-color: #FFF;
+            height: 65px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 30px;
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+            order: 1;
+        }
+       
+        .top-navbar.external-mode {
+            background: linear-gradient(135deg, #1A365D 0%, #2B6CB0 100%) !important;
+            border-bottom: 2px solid #319795 !important;
+        }
+ 
+        .top-navbar.external-mode #nav-title { color: #FFFFFF !important; }
+        .top-navbar.external-mode .user-profile {
+            background: rgba(255, 255, 255, 0.15) !important;
+            border-color: rgba(255, 255, 255, 0.3) !important;
+            color: #FFFFFF !important;
+        }
+ 
+        .top-navbar.external-mode .badge-role {
+            background-color: #319795 !important;
+            color: #FFFFFF !important;
+        }
+ 
+        .user-profile { display: flex; align-items: center; gap: 12px; font-size: 13px; font-weight: 600; cursor: pointer; background: #F8FAFC; padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border-color); transition: all 0.2s; white-space: nowrap; }
+        .user-profile:hover { background: #EDF2F7; }
+        .badge-role { background-color: #E2E8F0; padding: 3px 8px; border-radius: 4px; font-size: 10px; color: #4A5568; font-weight: bold; }
+ 
+        .view-section { display: none; padding: 20px 25px; }
+        .view-section.active { display: block; }
+ 
+        .card { background: var(--card-bg); border-radius: 10px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); padding: 18px; margin-bottom: 18px; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #EDF2F7; padding-bottom: 8px; }
+        .card-title { font-size: 15px; font-weight: 700; color: var(--femsa-dark); display: flex; align-items: center; gap: 8px; }
+       
+        .dashboard-grid { display: grid; grid-template-columns: 1fr 410px; gap: 20px; }
+        .gis-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
+        .gis-metric { background: #F8FAFC; border: 1px solid #E2E8F0; padding: 10px; border-radius: 6px; }
+        .gis-metric span { display: block; font-size: 10.5px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
+        .gis-metric strong { font-size: 14px; color: var(--femsa-dark); margin-top: 3px; display: block; }
+ 
+        #map, #map-wizard, #map-voting { height: 320px; width: 100%; border-radius: 8px; border: 1px solid var(--border-color); }
+        #map-voting { height: 420px; }
+ 
+        .ai-match-container { background: linear-gradient(135deg, #1E1E1E 0%, #2D3748 100%); color: #FFF; border-radius: 12px; padding: 22px; }
+        .match-score-badge { display: flex; align-items: center; gap: 15px; margin-bottom: 18px; }
+        .score-circle { width: 80px; height: 80px; border-radius: 50%; background: #2ECC71; color: #FFF; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 900; box-shadow: 0 0 15px rgba(46, 204, 113, 0.4); border: 4px solid #FFF; transition: all 0.3s ease; }
+        .match-details h3 { font-size: 18px; color: #2ECC71; margin-bottom: 4px; }
+        .ai-executive-summary { background: rgba(255, 255, 255, 0.08); border-left: 4px solid var(--accent-orange); padding: 12px; border-radius: 0 8px 8px 0; font-size: 13px; line-height: 1.45; color: #E2E8F0; }
+        .ai-executive-summary strong { color: var(--accent-orange); display: block; margin-bottom: 4px; text-transform: uppercase; font-size: 10.5px; }
+ 
+        .wizard-steps { display: flex; justify-content: space-between; margin-bottom: 25px; position: relative; }
+        .wizard-steps::before { content: ''; position: absolute; top: 20px; left: 0; right: 0; height: 3px; background: #E2E8F0; z-index: 1; }
+        .step { position: relative; z-index: 2; background: #FFF; padding: 0 15px; text-align: center; }
+        .step-icon { width: 38px; height: 38px; border-radius: 50%; background: #E2E8F0; color: #7F8C8D; display: flex; align-items: center; justify-content: center; font-weight: bold; margin: 0 auto 6px; }
+        .step.active .step-icon { background: var(--femsa-red); color: #FFF; }
+        .step.active span { color: var(--femsa-red); font-weight: bold; }
+ 
+        .wizard-page { display: none; }
+        .wizard-page.active { display: block; }
+ 
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; font-weight: 600; font-size: 13.5px; margin-bottom: 6px; }
+        .form-control { padding: 7px 10px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 12.5px; }
+       
+        .filter-bar-single-line {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: nowrap;
+            width: 100%;
+        }
+ 
+        .filter-label {
+            font-weight: 700;
+            font-size: 12px;
+            color: var(--femsa-dark);
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-right: 4px;
+        }
+ 
+        .upload-box { border: 2px dashed #CBD5E0; padding: 22px; border-radius: 10px; text-align: center; background: #F8FAFC; cursor: pointer; transition: all 0.2s; }
+        .upload-box:hover { border-color: var(--femsa-red); background: #FFF5F5; }
+        .upload-box i { font-size: 30px; color: #A0AEC0; margin-bottom: 6px; }
+ 
+        .photo-gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(105px, 1fr)); gap: 10px; margin-top: 12px; }
+        .thumb-card { position: relative; width: 100%; height: 100px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); background: #000; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
+        .thumb-card img { width: 100%; height: 100%; object-fit: cover; opacity: 0.9; transition: opacity 0.2s; }
+        .thumb-card:hover img { opacity: 1; }
+        .thumb-delete-btn { position: absolute; top: 4px; right: 4px; background: rgba(227, 24, 55, 0.9); color: #FFF; border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+        .thumb-delete-btn:hover { background: var(--femsa-red); transform: scale(1.1); }
+       
+        .add-more-card { border: 2px dashed #CBD5E0; border-radius: 8px; height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; background: #FFF; transition: all 0.2s; color: #7F8C8D; }
+        .add-more-card:hover { border-color: var(--femsa-red); color: var(--femsa-red); background: #FFF5F5; }
+        .add-more-card i { font-size: 18px; margin-bottom: 3px; }
+        .add-more-card span { font-size: 9.5px; font-weight: bold; text-transform: uppercase; text-align: center; padding: 0 4px; }
+ 
+        .voting-layout { display: grid; grid-template-columns: 1fr 360px; gap: 18px; }
+        .top-list { display: flex; flex-direction: column; gap: 10px; min-height: 340px; }
+        .top-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; background: #F8FAFC; border: 1px solid var(--border-color); border-radius: 8px; }
+        .top-item-info h5 { font-size: 12px; color: var(--femsa-dark); cursor: pointer; }
+        .top-item-info h5:hover { color: var(--femsa-red); }
+        .top-item-info p { font-size: 10.5px; color: var(--text-muted); }
+       
+        .btn-vote { background: #FFF; border: 1px solid var(--femsa-red); color: var(--femsa-red); padding: 4px 10px; border-radius: 20px; font-weight: bold; font-size: 10.5px; cursor: pointer; transition: all 0.2s; }
+        .btn-vote:hover { background: var(--femsa-red); color: #FFF; }
+        .btn-analyze { background: #2D3748; border: none; color: #FFF; padding: 5px 10px; border-radius: 4px; font-size: 10.5px; font-weight: 600; cursor: pointer; }
+        .btn-analyze:hover { background: var(--femsa-dark); }
+ 
+        .pagination-container { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border-color); }
+        .page-btn { background: #FFF; border: 1px solid var(--border-color); padding: 4px 8px; border-radius: 4px; font-size: 10.5px; font-weight: bold; cursor: pointer; }
+        .page-btn:hover { background: #EDF2F7; }
+ 
+        .battle-pass { display: flex; flex-direction: column; gap: 15px; margin-top: 15px; }
+        .pass-track {
+    display: flex;
+    align-items: center;
+    justify-content: center; /* Centra las tarjetas dentro de la barra negra */
+    gap: 18px;
+    overflow-x: auto;
+    padding: 18px 10px;
+    background: #1E1E1E;
+    border-radius: 12px;
+    width: fit-content;      /* Ajusta el ancho exacto del fondo negro a las tarjetas */
+    margin: 0 auto;          /* Centra todo el bloque dentro de la tarjeta blanca */
+}
+        .tier-card { min-width: 150px; background: #2D3748; border-radius: 8px; padding: 12px; text-align: center; color: #FFF; position: relative; border: 2px solid #4A5568; }
+        .tier-card.unlocked { border-color: var(--accent-green); background: linear-gradient(180deg, #2D3748 0%, #1A202C 100%); }
+        .tier-card.claimed { border-color: var(--accent-orange); }
+        .tier-badge { position: absolute; top: -8px; right: -8px; background: var(--accent-green); color: #FFF; font-size: 9px; padding: 2px 6px; border-radius: 8px; font-weight: bold; }
+        .tier-icon { font-size: 28px; margin: 8px 0; color: #CBD5E0; }
+        .unlocked .tier-icon { color: #F6E05E; }
+ 
+        .btn-action { background-color: var(--femsa-red); color: #FFF; border: none; padding: 7px 14px; border-radius: 6px; font-weight: 700; cursor: pointer; font-size: 12px; white-space: nowrap; }
+        .btn-action:hover { background-color: #B9122C; }
+        .btn-secondary { background-color: #7F8C8D; color: #FFF; border: none; padding: 7px 14px; border-radius: 6px; font-weight: 700; cursor: pointer; font-size: 12px; white-space: nowrap; }
+        .btn-secondary:hover { background-color: #6C7A89; }
+
+        /* BARRA DE NAVEGACIÓN INFERIOR (ESTRICTAMENTE EN LA BASE DEL SIMULADOR) */
+        .bottom-nav-bar {
+            display: none;
+            height: 60px;
+            background: #1E1E1E;
+            border-top: 1px solid #333;
+            z-index: 99999;
+            justify-content: space-around;
+            align-items: center;
+            padding-bottom: 5px;
+            flex-shrink: 0;
+            width: 100%;
+            order: 3;
+        }
+
+        .bottom-nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #A0AEC0;
+            font-size: 10px;
+            cursor: pointer;
+            gap: 3px;
+        }
+
+        .bottom-nav-item.active { color: var(--femsa-red); font-weight: bold; }
+        .bottom-nav-item i { font-size: 18px; }
+
+        /* REGLAS MÓVIL AL ACTIVAR EL SIMULADOR */
+        body.mobile-mode .sidebar { display: none !important; }
+        body.mobile-mode .bottom-nav-bar { display: flex !important; }
+        body.mobile-mode .top-navbar { padding: 28px 15px 10px 15px; height: auto; }
+        body.mobile-mode .top-navbar #nav-title { font-size: 12px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        body.mobile-mode .user-profile { padding: 4px 8px; gap: 6px; }
+        body.mobile-mode .user-profile span { font-size: 10px; }
+        body.mobile-mode .view-section { padding: 12px; }
+        body.mobile-mode .dashboard-grid, body.mobile-mode .voting-layout { grid-template-columns: 1fr !important; }
+        body.mobile-mode .gis-grid { grid-template-columns: repeat(2, 1fr) !important; }
+        body.mobile-mode .filter-bar-single-line { flex-wrap: wrap !important; }
+        body.mobile-mode .filter-bar-single-line select, body.mobile-mode .filter-bar-single-line input { width: 100% !important; flex: none !important; }
+
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.6); z-index: 99999; align-items: center; justify-content: center; }
+        .modal-overlay.active { display: flex; }
+        .sso-card { background: #FFF; border-radius: 12px; width: 380px; padding: 25px; text-align: center; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2); }
+        .sso-card h3 { font-size: 17px; color: var(--femsa-dark); margin-bottom: 4px; }
+        .sso-card p { font-size: 11.5px; color: var(--text-muted); margin-bottom: 20px; }
+        .sso-account-btn { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 10px; cursor: pointer; transition: all 0.2s; text-align: left; background: #FFF; }
+        .sso-account-btn:hover { background: #F8FAFC; border-color: var(--femsa-red); }
+        .sso-avatar { width: 36px; height: 36px; border-radius: 50%; background: #EDF2F7; display: flex; align-items: center; justify-content: center; font-weight: bold; color: var(--femsa-dark); }
+    </style>
+</head>
+<body>
+
+    <!-- CONTROL FLOTANTE DEL SWITCH FUERA DEL MOCKUP -->
+    <div class="floating-switch-container">
+        <span><i class="fa-solid fa-mobile-screen-button"></i> Versión móvil</span>
+        <label class="ios-switch">
+            <input type="checkbox" id="mobile-toggle" onchange="toggleMobileMode(this)">
+            <span class="slider"></span>
+        </label>
+    </div>
+
+    <!-- CONTENEDOR VIEWPORT DE LA APLICACIÓN -->
+    <div id="app-viewport">
+        <!-- ISLA DINÁMICA DEL MOCKUP -->
+        <div class="dynamic-island"></div>
+
+        <!-- Sidebar Navigation (ESCRITORIO) -->
+        <div class="sidebar">
+            <div>
+                <div class="brand-header">
+                    <i class="fa-solid fa-store"></i>
+                    <h2>FEMSA RETAIL</h2>
+                </div>
+                <ul class="menu-list">
+                    <li class="menu-item active" id="nav-dashboard" onclick="switchView('dashboard', this)"><i class="fa-solid fa-chart-line"></i> Expansión On-Demand</li>
+                    <li class="menu-item" id="nav-community" onclick="switchView('community', this)"><i class="fa-solid fa-mobile-screen-button"></i> Captura Comunidad</li>
+                    <li class="menu-item" id="nav-voting" onclick="switchView('voting', this)"><i class="fa-solid fa-check-to-slot"></i> Mapa de Votaciones</li>
+                    <li class="menu-item" id="nav-rewards" style="display: none;" onclick="switchView('rewards', this)"><i class="fa-solid fa-trophy"></i> Mis Recompensas</li>
+                </ul>
+            </div>
+        </div>
+     
+        <!-- Main Section -->
+        <div class="main-content">
+            <!-- BANNER SUPERIOR DE ENCABEZADO -->
+            <div class="top-navbar" id="top-navbar">
+                <div style="font-weight: 600; color: #4A5568;" id="nav-title">Expansión On-Demand | Resumen del Punto</div>
+               
+                <div class="user-profile" onclick="openSSOModal()" title="Haz clic para cambiar de usuario">
+                    <i class="fa-solid fa-circle-user" style="font-size: 20px;" id="profile-icon"></i>
+                    <div style="display: flex; flex-direction: column; text-align: right;">
+                        <span id="display-username">Héctor Martínez</span>
+                        <span class="badge-role" id="display-role">Analista (Interno)</span>
+                    </div>
+                    <i class="fa-solid fa-arrows-rotate" style="font-size: 11px; margin-left: 5px;"></i>
+                </div>
+            </div>
+
+            <!-- ÁREA CON SCROLL INDEPENDIENTE -->
+            <div class="scrollable-area">
+                <!-- VIEW 1: EXPANSIÓN ON-DEMAND -->
+                <div id="dashboard" class="view-section active">
+                    <div class="card" style="padding: 10px 15px; margin-bottom: 15px;">
+                        <div class="filter-bar-single-line">
+                            <span class="filter-label"><i class="fa-solid fa-filter" style="color: var(--femsa-red);"></i> Buscar Predio:</span>
+                           
+                            <select class="form-control" style="width: 160px;" id="dash-state-select" onchange="updateDashMunicipalityDropdown()">
+                                <option value="">Todos los Estados (32)</option>
+                                <option value="Aguascalientes">Aguascalientes</option>
+                                <option value="Baja California">Baja California</option>
+                                <option value="Baja California Sur">Baja California Sur</option>
+                                <option value="Campeche">Campeche</option>
+                                <option value="Coahuila">Coahuila</option>
+                                <option value="Colima">Colima</option>
+                                <option value="Chiapas">Chiapas</option>
+                                <option value="Chihuahua">Chihuahua</option>
+                                <option value="Ciudad de México">Ciudad de México</option>
+                                <option value="Durango">Durango</option>
+                                <option value="Guanajuato">Guanajuato</option>
+                                <option value="Guerrero">Guerrero</option>
+                                <option value="Hidalgo">Hidalgo</option>
+                                <option value="Jalisco">Jalisco</option>
+                                <option value="Estado de México">Estado de México</option>
+                                <option value="Michoacán">Michoacán</option>
+                                <option value="Morelos">Morelos</option>
+                                <option value="Nayarit">Nayarit</option>
+                                <option value="Nuevo León" selected>Nuevo León</option>
+                                <option value="Oaxaca">Oaxaca</option>
+                                <option value="Puebla">Puebla</option>
+                                <option value="Querétaro">Querétaro</option>
+                                <option value="Quintana Roo">Quintana Roo</option>
+                                <option value="San Luis Potosí">San Luis Potosí</option>
+                                <option value="Sinaloa">Sinaloa</option>
+                                <option value="Sonora">Sonora</option>
+                                <option value="Tabasco">Tabasco</option>
+                                <option value="Tamaulipas">Tamaulipas</option>
+                                <option value="Tlaxcala">Tlaxcala</option>
+                                <option value="Veracruz">Veracruz</option>
+                                <option value="Yucatán">Yucatán</option>
+                                <option value="Zacatecas">Zacatecas</option>
+                            </select>
+                           
+                            <select class="form-control" style="width: 160px;" id="dash-muni-select">
+                                <option value="">Todos los Municipios</option>
+                                <option value="Monterrey" selected>Monterrey</option>
+                                <option value="San Pedro Garza García">San Pedro Garza García</option>
+                                <option value="Guadalupe">Guadalupe</option>
+                                <option value="San Nicolás de los Garza">San Nicolás de los Garza</option>
+                                <option value="Apodaca">Apodaca</option>
+                                <option value="Santa Catarina">Santa Catarina</option>
+                            </select>
+         
+                            <input type="text" class="form-control" placeholder="Buscar por dirección..." style="flex: 1; min-width: 180px;" id="dash-search-input">
+                           
+                            <button class="btn-secondary" style="background-color: #2D3748;" onclick="locateUserDashboard()"><i class="fa-solid fa-location-crosshairs"></i> Mi Ubicación</button>
+                            <button class="btn-action" onclick="executeRealGeocodingSearch('dashboard')"><i class="fa-solid fa-magnifying-glass"></i> Buscar</button>
+                        </div>
+                    </div>
+         
+                    <div class="dashboard-grid">
+                        <div>
+                            <div class="card">
+                                <div class="card-header">
+                                    <span class="card-title" id="dash-address-title"><i class="fa-solid fa-location-dot" style="color: var(--femsa-red);"></i> Av. Gonzalitos #1500 (Vista Hermosa)</span>
+                                    <span style="font-size: 11px; color: var(--text-muted);" id="point-id">ID: #EXP-2026-MTY1</span>
+                                </div>
+                                <div id="map"></div>
+                            </div>
+         
+                            <div class="card">
+                                <div class="card-header">
+                                    <span class="card-title"><i class="fa-solid fa-database"></i> Variables Ingestadas (GIS)</span>
+                                    <span style="font-size: 10px; background: #E2E8F0; padding: 2px 6px; border-radius: 4px;">Sincronizado vía API</span>
+                                </div>
+                                <div class="gis-grid">
+                                    <div class="gis-metric"><span>Canibalización</span><strong id="val-canib">4.5% (Bajo)</strong></div>
+                                    <div class="gis-metric"><span>OXXO (300m)</span><strong id="val-oxxo300">0 Tiendas</strong></div>
+                                    <div class="gis-metric"><span>OXXO (1000m)</span><strong id="val-oxxo1000">2 Tiendas</strong></div>
+                                    <div class="gis-metric"><span>Competencia Directa</span><strong id="val-comp">1 Mapeada (450m)</strong></div>
+                                    <div class="gis-metric"><span>Tráfico Peatonal</span><strong id="val-peaton">2,100 /hr</strong></div>
+                                    <div class="gis-metric"><span>Tráfico Vehicular</span><strong id="val-vehic">6,200 /hr</strong></div>
+                                    <div class="gis-metric"><span>Ventas Entorno Prom.</span><strong id="val-ventas">$1,150k MXN/mes</strong></div>
+                                    <div class="gis-metric"><span>UAFIR Entorno</span><strong id="val-uafir">18.5%</strong></div>
+                                    <div class="gis-metric"><span>Renta Promedio Zona</span><strong id="val-renta">$45,000 MXN</strong></div>
+                                </div>
+                            </div>
+                        </div>
+         
+                        <div>
+                            <div class="ai-match-container card">
+                                <div class="card-header" style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+                                    <span class="card-title" style="color: #FFF;"><i class="fa-solid fa-wand-magic-sparkles" style="color: #2ECC71;"></i> Motor Predictivo IA</span>
+                                    <span style="font-size: 10px; background: rgba(46, 204, 113, 0.2); color: #2ECC71; padding: 2px 6px; border-radius: 4px;">Algoritmo V3.2</span>
+                                </div>
+                               
+                                <div class="match-score-badge">
+                                    <div class="score-circle" id="ai-score">96%</div>
+                                    <div class="match-details">
+                                        <h3 id="ai-status">Compatibilidad Excelente</h3>
+                                        <p>Probabilidad de Éxito Comercial para OXXO</p>
+                                    </div>
+                                </div>
+         
+                                <div class="ai-executive-summary">
+                                    <strong><i class="fa-solid fa-triangle-exclamation"></i> Dictamen Predictivo de IA:</strong>
+                                    <span id="ai-text">Ubicación de altísimo potencial en arteria vial principal de la ZMM. El volumen vehicular continuo y el alto flujo laboral en horarios pico aseguran una absorción inmediata. Se recomienda proceder de inmediato con las gestiones de prospección física.</span>
+                                </div>
+         
+                                <div style="margin-top: 18px;">
+                                    <button class="btn-action" style="width: 100%;" onclick="window.print()"><i class="fa-solid fa-file-pdf"></i> Exportar Dictamen Completo</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+         
+                <!-- VIEW 2: CAPTURA COMUNIDAD -->
+                <div id="community" class="view-section">
+                    <div class="card" style="max-width: 800px; margin: 0 auto;">
+                        <div class="card-header">
+                            <span class="card-title"><i class="fa-solid fa-plus-circle" style="color: var(--femsa-red);"></i> Proponer una Nueva Ubicación para OXXO</span>
+                        </div>
+                       
+                        <div class="wizard-steps">
+                            <div class="step active" id="st-1"><div class="step-icon">1</div><span>Fotografías</span></div>
+                            <div class="step" id="st-2"><div class="step-icon">2</div><span>Detalles</span></div>
+                            <div class="step" id="st-3"><div class="step-icon">3</div><span>Ubicación</span></div>
+                        </div>
+         
+                        <form id="wizard-form" onsubmit="event.preventDefault(); submitCommunityProposal();">
+                            <div class="wizard-page active" id="wp-1">
+                                <div class="form-group">
+                                    <label style="display: flex; justify-content: space-between;">
+                                        <span>Paso 1: Carga fotos del terreno o local (frente, contraesquina y entorno)</span>
+                                        <span style="font-size: 11px; color: var(--text-muted);" id="photo-counter-badge">0 / 5 Fotos</span>
+                                    </label>
+                                   
+                                    <div class="upload-box" id="main-upload-box" onclick="triggerFileSelect()">
+                                        <i class="fa-solid fa-camera"></i>
+                                        <p style="font-weight: 600; font-size: 13.5px;">Haz clic o arrastra aquí las imágenes</p>
+                                        <span style="font-size: 11.5px; color: var(--text-muted);">Puedes subir hasta 5 fotografías (Frente, Contraesquina y Entorno)</span>
+                                    </div>
+         
+                                    <div class="photo-gallery-grid" id="photo-gallery-grid"></div>
+         
+                                    <input type="file" id="file-input" style="display: none;" accept="image/*" multiple onchange="handleFileSelection(this)">
+                                    <p id="file-status" style="font-size: 11.5px; color: var(--accent-green); margin-top: 8px; font-weight: bold;"></p>
+                                </div>
+                                <div style="text-align: right;">
+                                    <button type="button" class="btn-action" onclick="goToStep(2)">Siguiente: Detalles <i class="fa-solid fa-arrow-right"></i></button>
+                                </div>
+                            </div>
+         
+                            <div class="wizard-page" id="wp-2">
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                    <div class="form-group">
+                                        <label>Paso 2: Tipo de Inmueble</label>
+                                        <select class="form-control" style="width: 100%;">
+                                            <option>Terreno Baldío</option>
+                                            <option>Local Comercial Comercializable</option>
+                                            <option>Esquina Residencial</option>
+                                            <option>Gasolinera / Plaza Comercial</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Estatus del Inmueble</label>
+                                        <select class="form-control" style="width: 100%;">
+                                            <option>En Renta (Tiene Letrero)</option>
+                                            <option>En Venta</option>
+                                            <option>Desocupado sin Letrero</option>
+                                            <option>Desconozco el Estatus</option>
+                                        </select>
+                                    </div>
+                                </div>
+         
+                                <div class="form-group">
+                                    <label>¿Por qué consideras que funcionaría un OXXO aquí?</label>
+                                    <textarea class="form-control" style="width: 100%;" rows="3" placeholder="Ej. No hay tiendas cerca, pasa mucho transporte público por las mañanas, hay escuelas cerca..."></textarea>
+                                </div>
+                                <div style="display: flex; justify-content: space-between;">
+                                    <button type="button" class="btn-secondary" onclick="goToStep(1)"><i class="fa-solid fa-arrow-left"></i> Anteriores</button>
+                                    <button type="button" class="btn-action" onclick="goToStep(3)">Siguiente: Ubicación <i class="fa-solid fa-arrow-right"></i></button>
+                                </div>
+                            </div>
+         
+                            <div class="wizard-page" id="wp-3">
+                                <div class="form-group">
+                                    <label>Paso 3: Selecciona la ubicación exacta en el mapa</label>
+                                    <p style="font-size: 11.5px; color: var(--text-muted); margin-bottom: 8px;">Mueve el marcador hacia la posición exacta del terreno o local.</p>
+                                    <div id="map-wizard"></div>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; margin-top: 15px;">
+                                    <button type="button" class="btn-secondary" onclick="goToStep(2)"><i class="fa-solid fa-arrow-left"></i> Anteriores</button>
+                                    <button type="submit" class="btn-action"><i class="fa-solid fa-paper-plane"></i> Enviar Propuesta a Expansión</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+         
+                <!-- VIEW 3: MAPA DE VOTACIONES -->
+                <div id="voting" class="view-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title"><i class="fa-solid fa-map-location-dot" style="color: var(--femsa-red);"></i> Mapa de Propuestas Comunitarias</span>
+                        </div>
+         
+                        <div class="filter-bar-single-line" style="margin-bottom: 12px;">
+                            <span class="filter-label"><i class="fa-solid fa-filter" style="color: var(--femsa-red);"></i> Filtrar:</span>
+         
+                            <select class="form-control" style="width: 170px;" id="state-select" onchange="updateMunicipalityDropdown()">
+                                <option value="">Todos los Estados (32)</option>
+                                <option value="Aguascalientes">Aguascalientes</option>
+                                <option value="Baja California">Baja California</option>
+                                <option value="Baja California Sur">Baja California Sur</option>
+                                <option value="Campeche">Campeche</option>
+                                <option value="Coahuila">Coahuila</option>
+                                <option value="Colima">Colima</option>
+                                <option value="Chiapas">Chiapas</option>
+                                <option value="Chihuahua">Chihuahua</option>
+                                <option value="Ciudad de México">Ciudad de México</option>
+                                <option value="Durango">Durango</option>
+                                <option value="Guanajuato">Guanajuato</option>
+                                <option value="Guerrero">Guerrero</option>
+                                <option value="Hidalgo">Hidalgo</option>
+                                <option value="Jalisco">Jalisco</option>
+                                <option value="Estado de México">Estado de México</option>
+                                <option value="Michoacán">Michoacán</option>
+                                <option value="Morelos">Morelos</option>
+                                <option value="Nayarit">Nayarit</option>
+                                <option value="Nuevo León" selected>Nuevo León</option>
+                                <option value="Oaxaca">Oaxaca</option>
+                                <option value="Puebla">Puebla</option>
+                                <option value="Querétaro">Querétaro</option>
+                                <option value="Quintana Roo">Quintana Roo</option>
+                                <option value="San Luis Potosí">San Luis Potosí</option>
+                                <option value="Sinaloa">Sinaloa</option>
+                                <option value="Sonora">Sonora</option>
+                                <option value="Tabasco">Tabasco</option>
+                                <option value="Tamaulipas">Tamaulipas</option>
+                                <option value="Tlaxcala">Tlaxcala</option>
+                                <option value="Veracruz">Veracruz</option>
+                                <option value="Yucatán">Yucatán</option>
+                                <option value="Zacatecas">Zacatecas</option>
+                            </select>
+                           
+                            <select class="form-control" style="width: 170px;" id="muni-select">
+                                <option value="">Todos los Municipios</option>
+                                <option value="Monterrey">Monterrey</option>
+                                <option value="San Pedro Garza García">San Pedro Garza García</option>
+                                <option value="Guadalupe">Guadalupe</option>
+                                <option value="San Nicolás de los Garza">San Nicolás de los Garza</option>
+                                <option value="Apodaca">Apodaca</option>
+                                <option value="Santa Catarina">Santa Catarina</option>
+                            </select>
+         
+                            <input type="text" class="form-control" placeholder="Buscar por dirección..." style="flex: 1; min-width: 180px;" id="voting-search-input">
+                           
+                            <button class="btn-secondary" style="background-color: #2D3748;" onclick="locateUser()"><i class="fa-solid fa-location-crosshairs"></i> Mi Ubicación</button>
+                            <button class="btn-action" onclick="executeRealGeocodingSearch('voting')"><i class="fa-solid fa-magnifying-glass"></i> Buscar</button>
+                        </div>
+         
+                        <div class="voting-layout">
+                            <div id="map-voting"></div>
+                            <div>
+                                <h4 style="font-size: 13.5px; margin-bottom: 8px; color: var(--femsa-dark);" id="top-title-header"><i class="fa-solid fa-fire" style="color: var(--accent-orange);"></i> Top Puntos Más Votados</h4>
+                                <div class="top-list" id="top-proposals-container"></div>
+                               
+                                <div class="pagination-container">
+                                    <button class="page-btn" onclick="changePage(-1)"><i class="fa-solid fa-chevron-left"></i> Ant.</button>
+                                    <span style="font-size: 10.5px; font-weight: bold; color: var(--text-muted);" id="page-indicator">Pág. 1 de 9</span>
+                                    <button class="page-btn" onclick="changePage(1)">Sig. <i class="fa-solid fa-chevron-right"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+         
+                <!-- VIEW 4: MIS RECOMPENSAS -->
+                <div id="rewards" class="view-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title"><i class="fa-solid fa-award" style="color: var(--accent-orange);"></i> Pase de Temporada: Cazador de Puntos FEMSA</span>
+                            <span style="font-size: 12.5px; font-weight: bold; color: var(--accent-green);">Tus Puntos Acumulados: 1,250 PTS</span>
+                        </div>
+                        <p style="font-size: 12.5px; color: var(--text-muted);">Sube propuestas validables por el área de Expansión para desbloquear hitos y recompensas exclusivas.</p>
+                       
+                        <div class="battle-pass">
+                            <div class="pass-track">
+                                <div class="tier-card claimed">
+                                    <div class="tier-badge" style="background: var(--accent-orange);">RECLAMADO</div>
+                                    <div style="font-size: 10.5px; color: #A0AEC0;">HITO 1 (250 PTS)</div>
+                                    <i class="fa-solid fa-mug-hot tier-icon"></i>
+                                    <div style="font-size: 12px; font-weight: bold;">Café Andatti Gratis</div>
+                                    <span style="font-size: 9.5px; color: #CBD5E0;">Cupón Canjeable en Tienda</span>
+                                </div>
+         
+                                <div class="tier-card unlocked">
+                                    <div class="tier-badge">DESBLOQUEADO</div>
+                                    <div style="font-size: 10.5px; color: #A0AEC0;">HITO 2 (750 PTS)</div>
+                                    <i class="fa-solid fa-utensils tier-icon"></i>
+                                    <div style="font-size: 12px; font-weight: bold;">Combo Vikingo OXXO</div>
+                                    <button style="margin-top: 6px; font-size: 9.5px; padding: 3px 6px; background: var(--accent-green); border: none; color: #FFF; border-radius: 4px; cursor: pointer;" onclick="this.parentNode.classList.remove('unlocked'); this.parentNode.classList.add('claimed'); this.innerText='RECLAMADO';">Reclamar Premio</button>
+                                </div>
+         
+                                <div class="tier-card unlocked">
+                                    <div class="tier-badge">DESBLOQUEADO</div>
+                                    <div style="font-size: 10.5px; color: #A0AEC0;">HITO 3 (1,200 PTS)</div>
+                                    <i class="fa-solid fa-gas-pump tier-icon"></i>
+                                    <div style="font-size: 12px; font-weight: bold;">Vales OXXO GAS $200</div>
+                                    <button style="margin-top: 6px; font-size: 9.5px; padding: 3px 6px; background: var(--accent-green); border: none; color: #FFF; border-radius: 4px; cursor: pointer;" onclick="this.parentNode.classList.remove('unlocked'); this.parentNode.classList.add('claimed'); this.innerText='RECLAMADO';">Reclamar Premio</button>
+                                </div>
+         
+                                <div class="tier-card">
+                                    <div style="font-size: 10.5px; color: #A0AEC0;">HITO 4 (2,000 PTS)</div>
+                                    <i class="fa-solid fa-gift tier-icon"></i>
+                                    <div style="font-size: 12px; font-weight: bold;">Tarjeta Regalo $500</div>
+                                    <span style="font-size: 9.5px; color: #A0AEC0;">Faltan 750 PTS</span>
+                                </div>
+         
+                                <div class="tier-card">
+                                    <div style="font-size: 10.5px; color: #A0AEC0;">HITO 5 (3,500 PTS)</div>
+                                    <i class="fa-solid fa-crown tier-icon" style="color: #F6E05E;"></i>
+                                    <div style="font-size: 12px; font-weight: bold;">Pase Anual VIP Spin</div>
+                                    <span style="font-size: 9.5px; color: #A0AEC0;">Faltan 2,250 PTS</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BARRA DE NAVEGACIÓN INFERIOR DE MOCKUP MÓVIL (TIPO APP IPHONE) -->
+            <div class="bottom-nav-bar">
+                <div class="bottom-nav-item active" id="bnav-dashboard" onclick="switchView('dashboard', this)">
+                    <i class="fa-solid fa-chart-line"></i>
+                    <span>On-Demand</span>
+                </div>
+                <div class="bottom-nav-item" id="bnav-community" onclick="switchView('community', this)">
+                    <i class="fa-solid fa-camera"></i>
+                    <span>Proponer</span>
+                </div>
+                <div class="bottom-nav-item" id="bnav-voting" onclick="switchView('voting', this)">
+                    <i class="fa-solid fa-map-location-dot"></i>
+                    <span>Mapa</span>
+                </div>
+                <div class="bottom-nav-item" id="bnav-rewards" style="display: none;" onclick="switchView('rewards', this)">
+                    <i class="fa-solid fa-trophy"></i>
+                    <span>Premios</span>
+                </div>
+            </div>
+     
+        </div>
+    </div>
+ 
+    <!-- SSO ROLE MODAL -->
+    <div class="modal-overlay" id="sso-modal">
+        <div class="sso-card">
+            <i class="fa-solid fa-shield-halved" style="font-size: 36px; color: var(--femsa-red); margin-bottom: 12px;"></i>
+            <h3>Seleccionar Perfil de Acceso</h3>
+            <p>Elige el tipo de cuenta para simular los permisos y vistas del sistema</p>
+           
+            <button class="sso-account-btn" onclick="setRole('internal')">
+                <div class="sso-avatar"><i class="fa-solid fa-user-tie"></i></div>
+                <div>
+                    <strong style="display: block; font-size: 12.5px; color: var(--femsa-dark);">Héctor Martínez</strong>
+                    <span style="font-size: 10.5px; color: var(--text-muted);">Analista de Expansión (Interno FEMSA)</span>
+                </div>
+            </button>
+ 
+            <button class="sso-account-btn" onclick="setRole('external')">
+                <div class="sso-avatar" style="background: #E6FFFA; color: #319795;"><i class="fa-solid fa-users"></i></div>
+                <div>
+                    <strong style="display: block; font-size: 12.5px; color: var(--femsa-dark);">Comunidad / Usuario Externo</strong>
+                    <span style="font-size: 10.5px; color: var(--text-muted);">Cazador de Puntos & Vecino</span>
+                </div>
+            </button>
+ 
+            <button class="btn-secondary" style="width: 100%; margin-top: 8px; font-size: 11.5px; padding: 7px;" onclick="closeSSOModal()">Cancelar</button>
+        </div>
+    </div>
+ 
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        var currentRole = 'internal';
+
+        function toggleMobileMode(checkbox) {
+            if (checkbox.checked) {
+                document.body.classList.add('mobile-mode');
+            } else {
+                document.body.classList.remove('mobile-mode');
+            }
+            setTimeout(function() {
+                if(map) map.invalidateSize();
+                if(mapWizard) mapWizard.invalidateSize();
+                if(mapVoting) mapVoting.invalidateSize();
+            }, 300);
+        }
+ 
+        function switchView(viewId, element) {
+            var views = document.getElementsByClassName('view-section');
+            for(var i=0; i<views.length; i++) { views[i].classList.remove('active'); }
+           
+            var items = document.querySelectorAll('.menu-item, .bottom-nav-item');
+            for(var j=0; j<items.length; j++) { items[j].classList.remove('active'); }
+           
+            document.getElementById(viewId).classList.add('active');
+            
+            var targetSidebar = document.getElementById('nav-' + viewId);
+            var targetBottom = document.getElementById('bnav-' + viewId);
+            if(targetSidebar) targetSidebar.classList.add('active');
+            if(targetBottom) targetBottom.classList.add('active');
+           
+            var titles = {
+                'dashboard': 'Expansión On-Demand | Resumen del Punto',
+                'community': 'Módulo de Captura Comunitaria',
+                'voting': 'Mapa de Propuestas Votadas por la Comunidad',
+                'rewards': 'Programa de Lealtad y Recompensas'
+            };
+            document.getElementById('nav-title').innerText = titles[viewId];
+ 
+            setTimeout(function() {
+                if(viewId === 'dashboard' && map) map.invalidateSize();
+                if(viewId === 'community' && mapWizard) mapWizard.invalidateSize();
+                if(viewId === 'voting' && mapVoting) mapVoting.invalidateSize();
+            }, 200);
+        }
+ 
+        function openSSOModal() {
+            document.getElementById('sso-modal').classList.add('active');
+        }
+ 
+        function closeSSOModal() {
+            document.getElementById('sso-modal').classList.remove('active');
+        }
+ 
+        function setRole(role) {
+            currentRole = role;
+            closeSSOModal();
+ 
+            var topNavbar = document.getElementById('top-navbar');
+            var profileIcon = document.getElementById('profile-icon');
+            var navDash = document.getElementById('nav-dashboard');
+            var bnavDash = document.getElementById('bnav-dashboard');
+            var navRewards = document.getElementById('nav-rewards');
+            var bnavRewards = document.getElementById('bnav-rewards');
+            var displayUser = document.getElementById('display-username');
+            var displayRole = document.getElementById('display-role');
+            var topTitle = document.getElementById('top-title-header');
+ 
+            if(role === 'internal') {
+                topNavbar.classList.remove('external-mode');
+                profileIcon.style.color = 'var(--femsa-red)';
+                if(navDash) navDash.style.display = 'flex';
+                if(bnavDash) bnavDash.style.display = 'flex';
+                if(navRewards) navRewards.style.display = 'none';
+                if(bnavRewards) bnavRewards.style.display = 'none';
+                displayUser.innerText = "Héctor Martínez";
+                displayRole.innerText = "Analista (Interno)";
+                topTitle.innerHTML = '<i class="fa-solid fa-fire" style="color: var(--accent-orange);"></i> Top Puntos Más Votados (Vista Corporativa)';
+                switchView('dashboard', navDash);
+            } else {
+                topNavbar.classList.add('external-mode');
+                profileIcon.style.color = '#319795';
+                if(navDash) navDash.style.display = 'none';
+                if(bnavDash) bnavDash.style.display = 'none';
+                if(navRewards) navRewards.style.display = 'flex';
+                if(bnavRewards) bnavRewards.style.display = 'flex';
+                displayUser.innerText = "Comunidad";
+                displayRole.innerText = "Cazador (Externo)";
+                topTitle.innerHTML = '<i class="fa-solid fa-location-dot" style="color: var(--femsa-red);"></i> Propuestas Destacadas de la Zona';
+                switchView('community', document.getElementById('nav-community'));
+            }
+            renderTopProposalsList();
+            initVotingMap();
+        }
+ 
+        var map, mapWizard, mapVoting;
+        var marker;
+        var initialLat = 25.6714;
+        var initialLng = -100.3090;
+        var currentPage = 1;
+        var itemsPerPage = 5;
+ 
+        // CATALOGO COMPLETO: 15 ZMM + 30 NACIONALES (45 REGISTROS EXACTOS)
+        var catalogProposals = [
+            // --- 15 PUNTOS MONTERREY / ZMM ---
+            { id: "#EXP-2026-MTY1", title: "Av. Gonzalitos #1500 (Vista Hermosa)", muni: "Monterrey", state: "NLE", votes: 520, lat: 25.6880, lng: -100.3520, score: "96%", status: "Compatibilidad Excelente", color: "#2ECC71", canib: "4.5% (Bajo)", oxxo300: "0 Tiendas", oxxo1000: "2 Tiendas", comp: "1 Mapeada (450m)", peaton: "2,100 /hr", vehic: "6,200 /hr", ventas: "$1,150k MXN/mes", uafir: "18.5%", renta: "$45,000 MXN", text: "Ubicación de altísimo potencial en arteria vial principal de la ZMM. El volumen vehicular continuo y el alto flujo laboral en horarios pico aseguran una absorción inmediata. Se recomienda proceder de inmediato con las gestiones de prospección física." },
+            { id: "#EXP-2026-MTY2", title: "Av. Eugenio Garza Sada #2500 (Tec)", muni: "Monterrey", state: "NLE", votes: 485, lat: 25.6480, lng: -100.2910, score: "94%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "6.0% (Bajo)", oxxo300: "0 Tiendas", oxxo1000: "3 Tiendas", comp: "2 Mapeadas (300m)", peaton: "3,400 /hr", vehic: "5,800 /hr", ventas: "$1,280k MXN/mes", uafir: "19.2%", renta: "$50,000 MXN", text: "Corredor universitario con densidad peatonal estudiantil permanente. El modelo proyecta un alto volumen de venta nocturna y categorías de consumo rápido, superando con creces la media de UAFIR del sector." },
+            { id: "#EXP-2026-MTY3", title: "Av. Alfonso Reyes x Garza Sada", muni: "Monterrey", state: "NLE", votes: 440, lat: 25.6360, lng: -100.2850, score: "89%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "5.2%", oxxo300: "0 Tiendas", oxxo1000: "2 Tiendas", comp: "1 Mapeada", peaton: "1,850 /hr", vehic: "4,900 /hr", ventas: "$980k MXN/mes", uafir: "16.8%", renta: "$42,000 MXN", text: "Punto de esquina con excelente visibilidad vial hacia el sur de la ciudad. Las métricas GIS confirman flujo constante durante todo el día y un índice de canibalización significativamente bajo." },
+            { id: "#EXP-2026-MTY4", title: "Av. Abraham Lincoln #4200 (Mitras)", muni: "Monterrey", state: "NLE", votes: 410, lat: 25.7150, lng: -100.3650, score: "91%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "3.8%", oxxo300: "0 Tiendas", oxxo1000: "1 Tienda", comp: "1 Mapeada", peaton: "2,200 /hr", vehic: "5,100 /hr", ventas: "$1,050k MXN/mes", uafir: "17.4%", renta: "$38,000 MXN", text: "Inmueble ubicado en corredor vial masivo con estación de transporte adyacente. Garantiza captación de usuarios en el primer turno matutino y alta rotación de inventarios." },
+            { id: "#EXP-2026-MTY5", title: "Av. Pino Suárez #800 (Centro)", muni: "Monterrey", state: "NLE", votes: 395, lat: 25.6740, lng: -100.3180, score: "85%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "12.0%", oxxo300: "1 Tienda", oxxo1000: "5 Tiendas", comp: "2 Mapeadas", peaton: "4,100 /hr", vehic: "4,500 /hr", ventas: "$1,100k MXN/mes", uafir: "15.0%", renta: "$55,000 MXN", text: "Elevado tráfico peatonal por actividad comercial en el centro metropolitano. Aunque existe una tienda cercana, el volumen de transeúntes absorbe con holgura la oferta sin generar canibalización crítica." },
+            { id: "#EXP-2026-MTY6", title: "Av. Vasconcelos #300 (Del Valle)", muni: "San Pedro Garza García", state: "NLE", votes: 370, lat: 25.6580, lng: -100.3680, score: "78%", status: "Compatibilidad Mod-Alta", color: "#2ECC71", canib: "8.5%", oxxo300: "0 Tiendas", oxxo1000: "2 Tiendas", comp: "1 Mapeada", peaton: "1,100 /hr", vehic: "4,200 /hr", ventas: "$890k MXN/mes", uafir: "12.5%", renta: "$62,000 MXN", text: "Inmueble en zona residencial socioeconómica alta. Muestra un flujo vehicular sólido, aunque la proyección de UAFIR requiere vigilar los costos operativos generales para mantener la rentabilidad del punto." },
+            { id: "#EXP-2026-MTY7", title: "Av. Calzada del Valle #101", muni: "San Pedro Garza García", state: "NLE", votes: 350, lat: 25.6520, lng: -100.3580, score: "82%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "4.0%", oxxo300: "0 Tiendas", oxxo1000: "1 Tienda", comp: "0 Mapeadas", peaton: "1,400 /hr", vehic: "3,800 /hr", ventas: "$920k MXN/mes", uafir: "14.2%", renta: "$58,000 MXN", text: "Punto de conveniencia premium sobre circuito recreativo y comercial. Muestra un excelente desempeño estimado en categorías de hidratación, café y alimentos listos para consumir." },
+            { id: "#EXP-2026-MTY8", title: "Av. Eloy Cavazos #2100", muni: "Guadalupe", state: "NLE", votes: 335, lat: 25.6600, lng: -100.2400, score: "93%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "2.5%", oxxo300: "0 Tiendas", oxxo1000: "1 Tienda", comp: "1 Mapeada", peaton: "1,900 /hr", vehic: "5,300 /hr", ventas: "$1,020k MXN/mes", uafir: "18.0%", renta: "$36,000 MXN", text: "Arteria principal de acceso a fraccionamientos de alta densidad residencial. Las métricas de UAFIR proyectadas y la reducida presencia de competidores convierten al predio en un candidato ideal." },
+            { id: "#EXP-2026-MTY9", title: "Av. Pablo Livas #4500", muni: "Guadalupe", state: "NLE", votes: 310, lat: 25.6680, lng: -100.2100, score: "88%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "5.0%", oxxo300: "0 Tiendas", oxxo1000: "2 Tiendas", comp: "1 Mapeada", peaton: "1,650 /hr", vehic: "4,100 /hr", ventas: "$870k MXN/mes", uafir: "15.8%", renta: "$32,000 MXN", text: "Sector habitacional consolidado con curva de demanda constante durante todo el día. Se aprueba avanzar a la fase de factibilidad técnica." },
+            { id: "#EXP-2026-MTY10", title: "Av. Universidad #1200 (San Nicolás)", muni: "San Nicolás de los Garza", state: "NLE", votes: 300, lat: 25.7350, lng: -100.3000, score: "95%", status: "Compatibilidad Excelente", color: "#2ECC71", canib: "1.8%", oxxo300: "0 Tiendas", oxxo1000: "1 Tienda", comp: "1 Mapeada", peaton: "2,800 /hr", vehic: "5,900 /hr", ventas: "$1,210k MXN/mes", uafir: "19.0%", renta: "$40,000 MXN", text: "Nodo comercial-industrial estratégico frente a estación de transporte colectivo. Sus proyecciones de venta diaria lo sitúan en el primer decil de eficiencia operativa en la plaza." },
+            { id: "#EXP-2026-MTY11", title: "Av. Manuel L. Barragán #2200", muni: "San Nicolás de los Garza", state: "NLE", votes: 280, lat: 25.7280, lng: -100.3120, score: "87%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "6.2%", oxxo300: "0 Tiendas", oxxo1000: "2 Tiendas", comp: "2 Mapeadas", peaton: "1,500 /hr", vehic: "4,800 /hr", ventas: "$940k MXN/mes", uafir: "16.1%", renta: "$37,000 MXN", text: "Ubicación en corredor con alto flujo deportivo y residencial. Presenta un equilibrio sólido entre la densidad de tráfico vehicular y la tasa de conversión en tienda." },
+            { id: "#EXP-2026-MTY12", title: "Av. Miguel Alemán #3000", muni: "Apodaca", state: "NLE", votes: 265, lat: 25.7500, lng: -100.2000, score: "92%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "3.0%", oxxo300: "0 Tiendas", oxxo1000: "1 Tienda", comp: "1 Mapeada", peaton: "1,400 /hr", vehic: "6,500 /hr", ventas: "$1,100k MXN/mes", uafir: "18.2%", renta: "$38,000 MXN", text: "Eje industrial hacia la zona del aeropuerto. Registra alta demanda proyectada para servicios Spin y consumo de alimentos por personal técnico y operativo." },
+            { id: "#EXP-2026-MTY13", title: "Av. Concordia x Cda. a Laredo", muni: "Apodaca", state: "NLE", votes: 240, lat: 25.7800, lng: -100.2400, score: "84%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "4.8%", oxxo300: "0 Tiendas", oxxo1000: "2 Tiendas", comp: "0 Mapeadas", peaton: "1,200 /hr", vehic: "4,300 /hr", ventas: "$830k MXN/mes", uafir: "14.9%", renta: "$30,000 MXN", text: "Esquina en polo de crecimiento residencial nuevo. Las proyecciones poblacionales a mediano plazo justifican la incorporación preventiva del punto a la red." },
+            { id: "#EXP-2026-MTY14", title: "Av. Manuel Ordóñez #600", muni: "Santa Catarina", state: "NLE", votes: 225, lat: 25.6750, lng: -100.4600, score: "86%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "5.5%", oxxo300: "0 Tiendas", oxxo1000: "2 Tiendas", comp: "1 Mapeada", peaton: "1,550 /hr", vehic: "4,600 /hr", ventas: "$880k MXN/mes", uafir: "15.5%", renta: "$33,000 MXN", text: "Acceso principal a la mancha urbana de Santa Catarina. Destaca por el tránsito continuo de vehículos particulares y unidades de transporte local." },
+            { id: "#EXP-2026-MTY15", title: "Av. Revolución x Chapultepec", muni: "Monterrey", state: "NLE", votes: 210, lat: 25.6550, lng: -100.2800, score: "90%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "4.1%", oxxo300: "0 Tiendas", oxxo1000: "1 Tienda", comp: "1 Mapeada", peaton: "1,750 /hr", vehic: "5,400 /hr", ventas: "$1,010k MXN/mes", uafir: "17.2%", renta: "$41,000 MXN", text: "Cruce vial neurálgico en zona sur-oriente. Presenta características idóneas para formato OXXO con acceso vehicular rápido y espacio para estacionamiento." },
+
+            // --- 30 PUNTOS COBERTURA NACIONAL ---
+            { id: "#EXP-2026-001", title: "Av. Ejército Mexicano #102", muni: "Tampico", state: "TAM", votes: 412, lat: 22.2558, lng: -97.8686, score: "94%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "8.2% (Bajo)", oxxo300: "0 Tiendas", oxxo1000: "2 Tiendas", comp: "1 Mapeada (500m)", peaton: "1,420 /hr", vehic: "3,800 /hr", ventas: "$840k MXN/mes", uafir: "14.2%", renta: "$38,000 MXN", text: "Terreno con elevada probabilidad de éxito comercial gracias a un flujo peatonal y vehicular positivo que sobrepasa los estándares mínimos requeridos para la zona." },
+            { id: "#EXP-2026-002", title: "Calle Monterrey #504", muni: "Altamira", state: "TAM", votes: 388, lat: 22.2700, lng: -97.8600, score: "61%", status: "Compatibilidad Media", color: "#F39C12", canib: "24.5% (Alto)", oxxo300: "1 Tienda", oxxo1000: "4 Tiendas", comp: "2 Mapeadas", peaton: "980 /hr", vehic: "2,100 /hr", ventas: "$610k MXN/mes", uafir: "9.5%", renta: "$52,000 MXN", text: "Ubicación con nivel moderado de canibalización respecto a la tienda OXXO situada a 320m. El tráfico peatonal es aceptable, pero se debe monitorear el margen de UAFIR neto." },
+            { id: "#EXP-2026-003", title: "Blvd. Agua Dulce s/n", muni: "Tampico", state: "TAM", votes: 345, lat: 22.2400, lng: -97.8750, score: "88%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "4.1% (Muy Bajo)", oxxo300: "0 Tiendas", oxxo1000: "1 Tienda", comp: "0 Mapeadas", peaton: "1,850 /hr", vehic: "4,200 /hr", ventas: "$920k MXN/mes", uafir: "16.8%", renta: "$41,000 MXN", text: "Punto estratégico en esquina vial con semáforo. La ausencia de canibalización directa y la fortaleza del UAFIR proyectado posicionan este inmueble como candidato prioritario." },
+            { id: "#EXP-2026-004", title: "Av. Universidad #801", muni: "Tampico", state: "TAM", votes: 310, lat: 22.2620, lng: -97.8510, score: "42%", status: "Compatibilidad Baja", color: "#E31837", canib: "38.0% (Crítico)", oxxo300: "2 Tiendas", oxxo1000: "6 Tiendas", comp: "3 Mapeadas (200m)", peaton: "450 /hr", vehic: "1,200 /hr", ventas: "$410k MXN/mes", uafir: "4.2%", renta: "$60,000 MXN", text: "Dictamen NO RECOMENDADO. El punto presenta saturación por canibalización con dos tiendas en un radio menor a 300 metros y bajo flujo en horas no pico." },
+            { id: "#EXP-2026-005", title: "Calle Tamaulipas #210", muni: "Ciudad Madero", state: "TAM", votes: 298, lat: 22.2510, lng: -97.8380, score: "96%", status: "Compatibilidad Excelente", color: "#2ECC71", canib: "1.0% (Nulo)", oxxo300: "0 Tiendas", oxxo1000: "0 Tiendas", comp: "1 Mapeada (800m)", peaton: "2,100 /hr", vehic: "5,500 /hr", ventas: "$1,150k MXN/mes", uafir: "19.5%", renta: "$35,000 MXN", text: "Ubicación PRIME. Presenta un índice récord de compatibilidad comercial sin canibalización a la red actual. La proyección de ventas maximiza el retorno de inversión." },
+            { id: "#EXP-2026-007", title: "Blvd. Benito Juárez #302", muni: "Guadalajara", state: "JAL", votes: 270, lat: 20.6760, lng: -103.3470, score: "78%", status: "Compatibilidad Mod-Alta", color: "#2ECC71", canib: "10.0%", oxxo300: "0 Tiendas", oxxo1000: "3 Tiendas", comp: "2 Mapeadas", peaton: "1,300 /hr", vehic: "3,200 /hr", ventas: "$790k MXN/mes", uafir: "13.5%", renta: "$36,000 MXN", text: "Punto apto con flujo peatonal constante impulsado por oficinas corporativas e instituciones aledañas. Cifras aseguran recuperación dentro de norma." },
+            { id: "#EXP-2026-008", title: "Calzada de la Viga #900", muni: "Cuauhtémoc", state: "CMX", votes: 262, lat: 19.4326, lng: -99.1332, score: "91%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "3.5%", oxxo300: "0 Tiendas", oxxo1000: "1 Tienda", comp: "1 Mapeada", peaton: "2,400 /hr", vehic: "6,000 /hr", ventas: "$1,200k MXN/mes", uafir: "18.2%", renta: "$45,000 MXN", text: "Demanda peatonal extraordinaria con flujo continuo multidireccional. La proyección de UAFIR supera con holgura la media de la plaza comercial." },
+            { id: "#EXP-2026-009", title: "Av. Insurgentes Sur #1200", muni: "Benito Juárez", state: "CMX", votes: 245, lat: 19.3780, lng: -99.1780, score: "68%", status: "Compatibilidad Media", color: "#F39C12", canib: "19.0%", oxxo300: "1 Tienda", oxxo1000: "5 Tiendas", comp: "3 Mapeadas", peaton: "1,100 /hr", vehic: "3,900 /hr", ventas: "$720k MXN/mes", uafir: "10.2%", renta: "$58,000 MXN", text: "Ubicación comercial de alta densidad pero con leve interferencia por canibalización. Se sugiere revisión técnica previa a emisión de autorización final." },
+            { id: "#EXP-2026-010", title: "Calle 60 #401 x 47", muni: "Mérida", state: "YUC", votes: 230, lat: 20.9676, lng: -89.6237, score: "93%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "2.0%", oxxo300: "0 Tiendas", oxxo1000: "1 Tienda", comp: "0 Mapeadas", peaton: "1,750 /hr", vehic: "3,500 /hr", ventas: "$890k MXN/mes", uafir: "16.0%", renta: "$30,000 MXN", text: "Excelente oportunidad en esquina comercial con vocación mixta turística-residencial. La nula canibalización en 500m asegura captación completa del sector." },
+            { id: "#EXP-2026-011", title: "Av. Venustiano Carranza #700", muni: "San Luis Potosí", state: "SLP", votes: 215, lat: 22.1565, lng: -100.9855, score: "82%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "6.0%", oxxo300: "0 Tiendas", oxxo1000: "2 Tiendas", comp: "1 Mapeada", peaton: "1,400 /hr", vehic: "3,100 /hr", ventas: "$810k MXN/mes", uafir: "14.0%", renta: "$33,000 MXN", text: "Corredor comercial consolidado. El modelo identifica una alta tasa de recurrencia en consumo de alimentos preparados y bebidas frías." },
+            { id: "#EXP-2026-012", title: "Blvd. 5 de Mayo #110", muni: "Puebla", state: "PUE", votes: 205, lat: 19.0414, lng: -98.2063, score: "85%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "4.8%", oxxo300: "0 Tiendas", oxxo1000: "2 Tiendas", comp: "1 Mapeada", peaton: "1,650 /hr", vehic: "4,100 /hr", ventas: "$870k MXN/mes", uafir: "15.5%", renta: "$36,000 MXN", text: "Ubicación de alto impacto visual junto a paradero de transporte masivo. La accesibilidad peatonal compensa las restricciones físicas del espacio." },
+            { id: "#EXP-2026-013", title: "Av. Adolfo López Mateos #88", muni: "Aguascalientes", state: "AGS", votes: 198, lat: 21.8853, lng: -102.2916, score: "74%", status: "Compatibilidad Mod-Alta", color: "#2ECC71", canib: "11.0%", oxxo300: "0 Tiendas", oxxo1000: "3 Tiendas", comp: "2 Mapeadas", peaton: "1,150 /hr", vehic: "2,800 /hr", ventas: "$690k MXN/mes", uafir: "11.2%", renta: "$29,000 MXN", text: "Métricas dentro del parámetro aceptable para zonas residenciales en consolidación. El dictamen sugiere prospección en manzana contigua." },
+            { id: "#EXP-2026-014", title: "Av. Tulum #24", muni: "Cancún", state: "ROO", votes: 190, lat: 21.1619, lng: -86.8515, score: "95%", status: "Compatibilidad Excelente", color: "#2ECC71", canib: "1.5%", oxxo300: "0 Tiendas", oxxo1000: "1 Tienda", comp: "1 Mapeada", peaton: "2,300 /hr", vehic: "5,100 /hr", ventas: "$1,100k MXN/mes", uafir: "18.9%", renta: "$40,000 MXN", text: "Punto de rendimiento excepcional impulsado por flujo de turismo y trabajadores del corredor hotelero. Ubica la tienda en el primer decil regional." },
+            { id: "#EXP-2026-015", title: "Calle Aldama #502", muni: "Chihuahua", state: "CHH", votes: 182, lat: 28.6330, lng: -106.0691, score: "80%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "7.0%", oxxo300: "0 Tiendas", oxxo1000: "2 Tiendas", comp: "1 Mapeada", peaton: "1,350 /hr", vehic: "3,000 /hr", ventas: "$780k MXN/mes", uafir: "13.0%", renta: "$31,000 MXN", text: "Inmueble céntrico con excelente exposición de fachada. El tráfico vehicular sostenido en horas pico aseguras estabilidad en ventas diarias." },
+            { id: "#EXP-2026-016", title: "Av. Revolución #1450", muni: "Tijuana", state: "BC", votes: 175, lat: 32.5330, lng: -117.0333, score: "87%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "5.5%", oxxo300: "0 Tiendas", oxxo1000: "2 Tiendas", comp: "2 Mapeadas", peaton: "1,800 /hr", vehic: "4,500 /hr", ventas: "$940k MXN/mes", uafir: "16.2%", renta: "$38,000 MXN", text: "Excelente densidad comercial con perfil de cliente binacional. Las métricas de UAFIR proyectadas superan las variaciones locales." },
+            { id: "#EXP-2026-017", title: "Blvd. Pedro Cárdenas #90", muni: "Matamoros", state: "TAM", votes: 168, lat: 25.8690, lng: -97.5028, score: "76%", status: "Compatibilidad Mod-Alta", color: "#2ECC71", canib: "9.2%", oxxo300: "0 Tiendas", oxxo1000: "3 Tiendas", comp: "1 Mapeada", peaton: "1,200 /hr", vehic: "3,300 /hr", ventas: "$730k MXN/mes", uafir: "12.1%", renta: "$32,000 MXN", text: "Corredor vial industrial con tráfico constante de carga y personal. Se recomienda verificar accesos para maniobra de proveedores." },
+            { id: "#EXP-2026-018", title: "Av. Hidalgo #330", muni: "Reynosa", state: "TAM", votes: 160, lat: 26.0924, lng: -98.2778, score: "83%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "6.1%", oxxo300: "0 Tiendas", oxxo1000: "2 Tiendas", comp: "1 Mapeada", peaton: "1,500 /hr", vehic: "3,700 /hr", ventas: "$830k MXN/mes", uafir: "14.5%", renta: "$34,000 MXN", text: "Esquina estratégica con alta absorción de clientes de parque industrial cercano. Rentabilidad estimada por encima de la media." },
+            { id: "#EXP-2026-019", title: "Calle Zaragoza #101", muni: "Saltillo", state: "COA", votes: 152, lat: 25.4260, lng: -101.0000, score: "79%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "8.0%", oxxo300: "0 Tiendas", oxxo1000: "2 Tiendas", comp: "1 Mapeada", peaton: "1,300 /hr", vehic: "2,900 /hr", ventas: "$760k MXN/mes", uafir: "12.8%", renta: "$30,000 MXN", text: "Zona residencial con bajo nivel de canibalización. El dictamen de IA sugiere avanzar con la validación de uso de suelo." },
+            { id: "#EXP-2026-020", title: "Av. Central #55", muni: "Tuxtla Gutiérrez", state: "CHP", votes: 145, lat: 16.7500, lng: -93.1167, score: "84%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "4.5%", oxxo300: "0 Tiendas", oxxo1000: "1 Tienda", comp: "1 Mapeada", peaton: "1,600 /hr", vehic: "3,400 /hr", ventas: "$820k MXN/mes", uafir: "14.8%", renta: "$28,000 MXN", text: "Punto de afluencia peatonal frente a oficinas administrativas. Genera un margen de UAFIR sumamente atractivo para la zona." },
+            { id: "#EXP-2026-021", title: "Calle 5 de Febrero #400", muni: "Querétaro", state: "QUE", votes: 138, lat: 20.5888, lng: -100.3899, score: "92%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "3.0%", oxxo300: "0 Tiendas", oxxo1000: "1 Tienda", comp: "0 Mapeadas", peaton: "1,900 /hr", vehic: "4,600 /hr", ventas: "$960k MXN/mes", uafir: "17.5%", renta: "$37,000 MXN", text: "Punto de desarrollo prioritario. La baja competencia y el crecimiento del entorno aseguran un retorno rápido del proyecto." },
+            { id: "#EXP-2026-022", title: "Av. Morelos #202", muni: "Morelia", state: "MIC", votes: 130, lat: 19.7008, lng: -101.1844, score: "72%", status: "Compatibilidad Media", color: "#F39C12", canib: "14.0%", oxxo300: "1 Tienda", oxxo1000: "3 Tiendas", comp: "2 Mapeadas", peaton: "1,050 /hr", vehic: "2,500 /hr", ventas: "$650k MXN/mes", uafir: "9.8%", renta: "$33,000 MXN", text: "Ubicación viable condicionada. Se detecta interferencia por canibalización y trabajos viales temporales en la arteria principal." },
+            { id: "#EXP-2026-023", title: "Blvd. Felipe Ángeles #80", muni: "Pachuca", state: "HID", votes: 122, lat: 20.1167, lng: -98.7333, score: "81%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "6.8%", oxxo300: "0 Tiendas", oxxo1000: "2 Tiendas", comp: "1 Mapeada", peaton: "1,450 /hr", vehic: "3,300 /hr", ventas: "$800k MXN/mes", uafir: "13.8%", renta: "$31,000 MXN", text: "Conexión estratégica a paradero de transporte. El tráfico vehicular y peatonal sostiene con amplitud las métricas del local." },
+            { id: "#EXP-2026-024", title: "Av. Álvaro Obregón #600", muni: "Culiacán", state: "SIN", votes: 115, lat: 24.8092, lng: -107.3944, score: "86%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "5.2%", oxxo300: "0 Tiendas", oxxo1000: "2 Tiendas", comp: "1 Mapeada", peaton: "1,550 /hr", vehic: "3,800 /hr", ventas: "$860k MXN/mes", uafir: "15.2%", renta: "$35,000 MXN", text: "Venta nocturna proyectada por encima del estándar. El dictamen recomienda proceder con las validaciones físicas de campo." },
+            { id: "#EXP-2026-025", title: "Calle Rosales #120", muni: "Hermosillo", state: "SON", votes: 108, lat: 29.0730, lng: -110.9559, score: "88%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "4.0%", oxxo300: "0 Tiendas", oxxo1000: "1 Tienda", comp: "1 Mapeada", peaton: "1,700 /hr", vehic: "4,000 /hr", ventas: "$900k MXN/mes", uafir: "16.1%", renta: "$36,000 MXN", text: "Alto volumen de ventas estimado en categorías clave. La esquina presenta excelente visibilidad y maniobrabilidad de acceso." },
+            { id: "#EXP-2026-026", title: "Av. Paseo Tabasco #405", muni: "Villahermosa", state: "TAB", votes: 99, lat: 17.9868, lng: -92.9303, score: "83%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "6.3%", oxxo300: "0 Tiendas", oxxo1000: "2 Tiendas", comp: "1 Mapeada", peaton: "1,400 /hr", vehic: "3,500 /hr", ventas: "$820k MXN/mes", uafir: "14.1%", renta: "$34,000 MXN", text: "Nodo comercial bancario con afluencia continua de clientes. La rentabilidad cumple con creces los estándares corporativos." },
+            { id: "#EXP-2026-027", title: "Calle 16 de Septiembre #90", muni: "Toluca", state: "MEX", votes: 92, lat: 19.2925, lng: -99.6569, score: "77%", status: "Compatibilidad Mod-Alta", color: "#2ECC71", canib: "10.5%", oxxo300: "0 Tiendas", oxxo1000: "3 Tiendas", comp: "2 Mapeadas", peaton: "1,250 /hr", vehic: "2,800 /hr", ventas: "$710k MXN/mes", uafir: "11.5%", renta: "$33,000 MXN", text: "Punto evaluado con balance positivo entre tráfico peatonal y ventas estimadas. Se sugiere avanzar con la prospección." },
+            { id: "#EXP-2026-028", title: "Av. Díaz Mirón #1500", muni: "Veracruz", state: "VER", votes: 85, lat: 19.1738, lng: -96.1342, score: "89%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "3.8%", oxxo300: "0 Tiendas", oxxo1000: "1 Tienda", comp: "1 Mapeada", peaton: "1,850 /hr", vehic: "4,200 /hr", ventas: "$930k MXN/mes", uafir: "16.9%", renta: "$35,000 MXN", text: "Excelente punto con acceso a pasajeros de terminales aledañas. Cifras de UAFIR proyectan una operación sólida." },
+            { id: "#EXP-2026-029", title: "Calle Madero #40", muni: "Zacatecas", state: "ZAC", votes: 78, lat: 22.7709, lng: -102.5832, score: "75%", status: "Compatibilidad Mod-Alta", color: "#2ECC71", canib: "11.5%", oxxo300: "0 Tiendas", oxxo1000: "3 Tiendas", comp: "1 Mapeada", peaton: "1,100 /hr", vehic: "2,400 /hr", ventas: "$670k MXN/mes", uafir: "10.8%", renta: "$27,000 MXN", text: "Inmueble adecuado para remodelación comercial rápida. Las variables apoyan la apertura sin afectar tiendas colindantes." },
+            { id: "#EXP-2026-030", title: "Blvd. Costero #800", muni: "Ensenada", state: "BC", votes: 70, lat: 31.8667, lng: -116.5999, score: "90%", status: "Compatibilidad Alta", color: "#2ECC71", canib: "2.5%", oxxo300: "0 Tiendas", oxxo1000: "1 Tienda", comp: "0 Mapeadas", peaton: "1,900 /hr", vehic: "4,100 /hr", ventas: "$950k MXN/mes", uafir: "17.1%", renta: "$37,000 MXN", text: "Esquina turística de alto impacto en consumo de fin de semana. El motor predictivo autoriza la revisión del predio." }
+        ];
+ 
+        var municipalitiesMap = {
+            "Nuevo León": ["Monterrey", "San Pedro Garza García", "Guadalupe", "San Nicolás de los Garza", "Apodaca", "Santa Catarina"],
+            "Tamaulipas": ["Tampico", "Ciudad Madero", "Altamira", "Reynosa", "Matamoros", "Nuevo Laredo"],
+            "Jalisco": ["Guadalajara", "Zapopan", "Tlaquepaque"],
+            "Ciudad de México": ["Cuauhtémoc", "Benito Juárez", "Miguel Hidalgo", "Coyoacán"],
+            "Yucatán": ["Mérida", "Progreso", "Kanasín"],
+            "Coahuila": ["Saltillo", "Torreón", "Monclova"],
+            "Chihuahua": ["Chihuahua", "Ciudad Juárez"]
+        };
+ 
+        var uploadedPhotos = [];
+ 
+        function triggerFileSelect() {
+            if(uploadedPhotos.length >= 5) {
+                alert("Has alcanzado el límite máximo de 5 fotografías.");
+                return;
+            }
+            document.getElementById('file-input').click();
+        }
+ 
+        function handleFileSelection(input) {
+            var files = Array.from(input.files);
+           
+            if (uploadedPhotos.length + files.length > 5) {
+                alert("Solo puedes subir un máximo de 5 fotografías por propuesta.");
+                files = files.slice(0, 5 - uploadedPhotos.length);
+            }
+ 
+            files.forEach(function(file) {
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    uploadedPhotos.push({
+                        name: file.name,
+                        src: e.target.result
+                    });
+                    renderPhotoGallery();
+                };
+                reader.readAsDataURL(file);
+            });
+ 
+            input.value = "";
+        }
+ 
+        function removePhoto(index) {
+            uploadedPhotos.splice(index, 1);
+            renderPhotoGallery();
+        }
+ 
+        function renderPhotoGallery() {
+            var gallery = document.getElementById('photo-gallery-grid');
+            var mainDropbox = document.getElementById('main-upload-box');
+            var counterBadge = document.getElementById('photo-counter-badge');
+            var fileStatus = document.getElementById('file-status');
+ 
+            gallery.innerHTML = "";
+            counterBadge.innerText = uploadedPhotos.length + " / 5 Fotos";
+ 
+            if (uploadedPhotos.length === 0) {
+                mainDropbox.style.display = "block";
+                fileStatus.innerText = "";
+            } else {
+                mainDropbox.style.display = "none";
+                fileStatus.innerText = "✓ " + uploadedPhotos.length + " imagen(es) lista(s) para revisión.";
+ 
+                uploadedPhotos.forEach(function(photo, idx) {
+                    var cardHtml = '<div class="thumb-card">' +
+                                   '  <img src="' + photo.src + '" title="' + photo.name + '">' +
+                                   '  <button type="button" class="thumb-delete-btn" onclick="removePhoto(' + idx + ')"><i class="fa-solid fa-xmark"></i></button>' +
+                                   '</div>';
+                    gallery.innerHTML += cardHtml;
+                });
+ 
+                if (uploadedPhotos.length < 5) {
+                    var addMoreHtml = '<div class="add-more-card" onclick="triggerFileSelect()">' +
+                                      '  <i class="fa-solid fa-plus"></i>' +
+                                      '  <span>Cargar otra foto</span>' +
+                                      '</div>';
+                    gallery.innerHTML += addMoreHtml;
+                }
+            }
+        }
+ 
+        window.onload = function() {
+            initDashboardMap();
+            initWizardMap();
+            initVotingMap();
+            renderTopProposalsList();
+        };
+ 
+        function initDashboardMap() {
+            map = L.map('map').setView([initialLat, initialLng], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+            marker = L.marker([initialLat, initialLng], {draggable: true}).addTo(map);
+ 
+            marker.on('dragend', function() {
+                var pos = marker.getLatLng();
+                var sc = catalogProposals[Math.floor(Math.random() * catalogProposals.length)];
+                updateDashboardUI(sc, pos.lat, pos.lng);
+            });
+        }
+ 
+        function initWizardMap() {
+            mapWizard = L.map('map-wizard').setView([initialLat, initialLng], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(mapWizard);
+            L.marker([initialLat, initialLng], {draggable: true}).addTo(mapWizard);
+        }
+ 
+        function initVotingMap() {
+            if(mapVoting) { mapVoting.remove(); }
+            mapVoting = L.map('map-voting').setView([23.6345, -102.5528], 5);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(mapVoting);
+ 
+            catalogProposals.forEach(function(item, index) {
+                var m = L.marker([item.lat, item.lng]).addTo(mapVoting);
+               
+                var votesLabelHtml = currentRole === 'internal' ?
+                    "Votos: <strong>" + item.votes + "</strong>" :
+                    "Estatus: <strong style='color:#319795;'>Propuesta en Revisión</strong>";
+ 
+                var actionBtnHtml = "";
+                if (currentRole === 'internal') {
+                    actionBtnHtml = "<button style='background:#2D3748; color:#fff; border:none; padding:4px 8px; border-radius:4px; font-size:11px; cursor:pointer;' onclick='analyzeProposalDirectly(" + index + ")'><i class=\"fa-solid fa-wand-magic-sparkles\"></i> Analizar en On-Demand</button>";
+                } else {
+                    actionBtnHtml = "<button style='background:#E31837; color:#fff; border:none; padding:4px 8px; border-radius:4px; font-size:11px; cursor:pointer;' onclick='alert(\"¡Apoyo registrado para " + item.title + "!\")'>Apoyar Ubicación</button>";
+                }
+               
+                var popupContent = "<b>" + item.title + " (" + item.muni + ")</b><br>" +
+                                   votesLabelHtml + "<br>" +
+                                   "<div style='margin-top:8px;'>" +
+                                   actionBtnHtml +
+                                   "</div>";
+                m.bindPopup(popupContent);
+            });
+        }
+ 
+        function executeRealGeocodingSearch(targetView) {
+            var state = "", muni = "", queryText = "";
+           
+            if(targetView === 'dashboard') {
+                state = document.getElementById('dash-state-select').value;
+                muni = document.getElementById('dash-muni-select').value;
+                queryText = document.getElementById('dash-search-input').value;
+            } else {
+                state = document.getElementById('state-select').value;
+                muni = document.getElementById('muni-select').value;
+                queryText = document.getElementById('voting-search-input').value;
+            }
+ 
+            var fullAddress = [queryText, muni, state, "México"].filter(Boolean).join(", ");
+ 
+            if(!fullAddress || fullAddress === "México") {
+                alert("Por favor selecciona un estado, municipio o ingresa una dirección.");
+                return;
+            }
+ 
+            fetch("https://nominatim.openstreetmap.org/search?format=json&q=" + encodeURIComponent(fullAddress))
+                .then(function(response) { return response.json(); })
+                .then(function(data) {
+                    if (data && data.length > 0) {
+                        var lat = parseFloat(data[0].lat);
+                        var lon = parseFloat(data[0].lon);
+                        var displayName = data[0].display_name.split(',')[0];
+ 
+                        if(targetView === 'dashboard') {
+                            map.setView([lat, lon], 15);
+                            marker.setLatLng([lat, lon]);
+                           
+                            var randomScenario = catalogProposals[Math.floor(Math.random() * catalogProposals.length)];
+                            randomScenario.title = displayName || fullAddress;
+                            randomScenario.muni = muni || "Zona Evaluada";
+                            updateDashboardUI(randomScenario, lat, lon);
+                        } else {
+                            mapVoting.flyTo([lat, lon], 14, { duration: 1.5 });
+                        }
+                    } else {
+                        alert("Ubicación no encontrada.");
+                    }
+                })
+                .catch(function() {
+                    var fallbackLat = initialLat + (Math.random() * 0.02 - 0.01);
+                    var fallbackLng = initialLng + (Math.random() * 0.02 - 0.01);
+                   
+                    if(targetView === 'dashboard') {
+                        map.setView([fallbackLat, fallbackLng], 15);
+                        marker.setLatLng([fallbackLat, fallbackLng]);
+                        var randomScenario = catalogProposals[Math.floor(Math.random() * catalogProposals.length)];
+                        randomScenario.title = fullAddress;
+                        updateDashboardUI(randomScenario, fallbackLat, fallbackLng);
+                    } else {
+                        mapVoting.flyTo([fallbackLat, fallbackLng], 14);
+                    }
+                });
+        }
+ 
+        function analyzeProposalDirectly(index) {
+            if(currentRole !== 'internal') {
+                alert("El módulo de IA es exclusivo para Analistas de Expansión.");
+                return;
+            }
+            var target = catalogProposals[index];
+            switchView('dashboard', document.querySelectorAll('.menu-item')[0]);
+           
+            map.setView([target.lat, target.lng], 15);
+            marker.setLatLng([target.lat, target.lng]);
+            updateDashboardUI(target, target.lat, target.lng);
+        }
+ 
+        function updateDashboardUI(sc, lat, lng) {
+            document.getElementById('dash-address-title').innerHTML = '<i class="fa-solid fa-location-dot" style="color: var(--femsa-red);"></i> ' + sc.title + ' (' + sc.muni + ')';
+            document.getElementById('point-id').innerText = "ID: " + sc.id;
+            document.getElementById('ai-score').innerText = sc.score;
+            document.getElementById('ai-score').style.background = sc.color;
+            document.getElementById('ai-status').innerText = sc.status;
+            document.getElementById('ai-status').style.color = sc.color;
+            document.getElementById('ai-text').innerText = sc.text;
+           
+            document.getElementById('val-canib').innerText = sc.canib;
+            document.getElementById('val-oxxo300').innerText = sc.oxxo300;
+            document.getElementById('val-oxxo1000').innerText = sc.oxxo1000;
+            document.getElementById('val-comp').innerText = sc.comp;
+            document.getElementById('val-peaton').innerText = sc.peaton;
+            document.getElementById('val-vehic').innerText = sc.vehic;
+            document.getElementById('val-ventas').innerText = sc.ventas;
+            document.getElementById('val-uafir').innerText = sc.uafir;
+            document.getElementById('val-renta').innerText = sc.renta;
+        }
+ 
+        function renderTopProposalsList() {
+            var container = document.getElementById('top-proposals-container');
+            container.innerHTML = "";
+           
+            var start = (currentPage - 1) * itemsPerPage;
+            var end = start + itemsPerPage;
+            var pageItems = catalogProposals.slice(start, end);
+ 
+            pageItems.forEach(function(item, idx) {
+                var actualIndex = start + idx;
+               
+                var infoVotesHtml = currentRole === 'internal' ?
+                    '<strong>' + item.votes + ' Votos</strong>' :
+                    '<span style="color:#319795; font-weight:bold;">Tendencia Local</span>';
+ 
+                var actionBtnHtml = "";
+                if (currentRole === 'internal') {
+                    actionBtnHtml = '<button class="btn-analyze" onclick="analyzeProposalDirectly(' + actualIndex + ')"><i class="fa-solid fa-wand-magic-sparkles"></i> Analizar</button>';
+                } else {
+                    actionBtnHtml = '<button class="btn-vote" onclick="addVote(this)"><i class="fa-solid fa-thumbs-up"></i> Apoyar</button>';
+                }
+ 
+                var html = '<div class="top-item">' +
+                           '  <div class="top-item-info">' +
+                           '    <h5 onclick="' + (currentRole === 'internal' ? 'analyzeProposalDirectly(' + actualIndex + ')' : '') + '">' + item.title + '</h5>' +
+                           '    <p>' + item.muni + ' (' + item.state + ') | ' + infoVotesHtml + '</p>' +
+                           '  </div>' +
+                           '  <div>' +
+                           actionBtnHtml +
+                           '  </div>' +
+                           '</div>';
+                container.innerHTML += html;
+            });
+ 
+            var totalPages = Math.ceil(catalogProposals.length / itemsPerPage);
+            document.getElementById('page-indicator').innerText = "Pág. " + currentPage + " de " + totalPages;
+        }
+ 
+        function changePage(direction) {
+            var totalPages = Math.ceil(catalogProposals.length / itemsPerPage);
+            currentPage += direction;
+            if(currentPage < 1) currentPage = 1;
+            if(currentPage > totalPages) currentPage = totalPages;
+            renderTopProposalsList();
+        }
+ 
+        function updateDashMunicipalityDropdown() {
+            var state = document.getElementById('dash-state-select').value;
+            var muniSelect = document.getElementById('dash-muni-select');
+            muniSelect.innerHTML = '<option value="">Todos los Municipios</option>';
+           
+            if(municipalitiesMap[state]) {
+                municipalitiesMap[state].forEach(function(m) {
+                    muniSelect.innerHTML += '<option value="' + m + '">' + m + '</option>';
+                });
+            } else {
+                muniSelect.innerHTML += '<option value="Municipio Centro">Municipio Centro</option><option value="Norte">Norte</option>';
+            }
+        }
+
+        function updateMunicipalityDropdown() {
+            var state = document.getElementById('state-select').value;
+            var muniSelect = document.getElementById('muni-select');
+            muniSelect.innerHTML = '<option value="">Todos los Municipios</option>';
+           
+            if(municipalitiesMap[state]) {
+                municipalitiesMap[state].forEach(function(m) {
+                    muniSelect.innerHTML += '<option value="' + m + '">' + m + '</option>';
+                });
+            } else {
+                muniSelect.innerHTML += '<option value="Municipio Centro">Municipio Centro</option><option value="Norte">Norte</option>';
+            }
+        }
+ 
+        function locateUserDashboard() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(function(position) {
+                    var uLat = position.coords.latitude;
+                    var uLng = position.coords.longitude;
+                    map.setView([uLat, uLng], 15);
+                    marker.setLatLng([uLat, uLng]);
+                });
+            }
+        }
+ 
+        function goToStep(stepNum) {
+            var pages = document.getElementsByClassName('wizard-page');
+            for(var i=0; i<pages.length; i++) { pages[i].classList.remove('active'); }
+           
+            var steps = document.getElementsByClassName('step');
+            for(var j=0; j<steps.length; j++) {
+                if(j + 1 <= stepNum) steps[j].classList.add('active');
+                else steps[j].classList.remove('active');
+            }
+           
+            document.getElementById('wp-' + stepNum).classList.add('active');
+            if(stepNum === 3 && mapWizard) {
+                setTimeout(function() { mapWizard.invalidateSize(); }, 200);
+            }
+        }
+ 
+        function submitCommunityProposal() {
+            if(uploadedPhotos.length === 0) {
+                alert('Por favor carga al menos una fotografía.');
+                return;
+            }
+            alert('¡Propuesta enviada con éxito! +1,200 puntos cargados en tu cuenta Spin!');
+            goToStep(1);
+            document.getElementById('wizard-form').reset();
+            uploadedPhotos = [];
+            renderPhotoGallery();
+            switchView('voting', document.getElementsByClassName('menu-item')[2]);
+        }
+ 
+        function locateUser() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(function(position) {
+                    var uLat = position.coords.latitude;
+                    var uLng = position.coords.longitude;
+                    mapVoting.flyTo([uLat, uLng], 14);
+                });
+            }
+        }
+ 
+        function addVote(btn) {
+            btn.innerText = "¡Apoyado!";
+            btn.style.background = "#2ECC71";
+            btn.style.color = "#FFF";
+            btn.disabled = true;
+        }
+    </script>
+</body>
+</html>
