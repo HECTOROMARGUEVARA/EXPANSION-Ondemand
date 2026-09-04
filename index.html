@@ -364,6 +364,10 @@
         .sso-account-btn { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 10px; cursor: pointer; transition: all 0.2s; text-align: left; background: #FFF; }
         .sso-account-btn:hover { background: #F8FAFC; border-color: var(--femsa-red); }
         .sso-avatar { width: 36px; height: 36px; border-radius: 50%; background: #EDF2F7; display: flex; align-items: center; justify-content: center; font-weight: bold; color: var(--femsa-dark); }
+     /* Sube el switch únicamente cuando el mockup de versión móvil está activo */
+        body.mobile-mode .floating-switch-container {
+            bottom: 70px !important;
+        }
     </style>
 </head>
 <body>
