@@ -62,7 +62,48 @@
         }
         body.mobile-mode .dynamic-island { display: block; }
  
-        .sidebar { width: 260px; background-color: var(--femsa-dark); color: #FFF; display: flex; flex-direction: column; padding: 20px 0; z-index: 10; flex-shrink: 0; }
+        /* ESTILOS DE BARRA LATERAL Y BOTÓN DE DESPLEGADO */
+        .sidebar { 
+            width: 260px; 
+            background-color: var(--femsa-dark); 
+            color: #FFF; 
+            display: flex; 
+            flex-direction: column; 
+            padding: 20px 0; 
+            z-index: 10; 
+            flex-shrink: 0; 
+            position: relative;
+            transition: margin-left 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .sidebar.collapsed {
+            margin-left: -260px;
+        }
+
+        .toggle-sidebar-btn {
+            position: absolute;
+            top: 18px;
+            right: -18px;
+            width: 36px;
+            height: 36px;
+            background: var(--femsa-dark);
+            color: #FFF;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 99;
+            box-shadow: 2px 0 8px rgba(0,0,0,0.3);
+            transition: background 0.2s, transform 0.2s;
+        }
+
+        .toggle-sidebar-btn:hover {
+            background: var(--femsa-red);
+            transform: scale(1.08);
+        }
+
         .brand-header { padding: 0 20px 20px; border-bottom: 1px solid #333; display: flex; align-items: center; gap: 12px; }
         .brand-header img { height: 36px; width: auto; object-fit: contain; }
         .brand-header h2 { font-size: 15px; font-weight: 700; color: #FFF; line-height: 1.2; }
@@ -110,7 +151,7 @@
         /* BANNER SUPERIOR / TOP NAVBAR CON LOGO INTEGRADO */
         .top-navbar {
             background-color: #FFF;
-            height: 120px;
+            height: 100px;
             border-bottom: 1px solid var(--border-color);
             display: flex;
             align-items: center;
@@ -126,7 +167,7 @@
             gap: 12px;
         }
         .navbar-brand-logo img {
-            height: 80px;
+            height: 100px;
             width: auto;
             object-fit: contain;
             transition: filter 0.3s ease, mix-blend-mode 0.3s ease;
@@ -332,7 +373,12 @@
         <div class="dynamic-island"></div>
  
         <!-- Sidebar Navigation (ESCRITORIO) -->
-        <div class="sidebar">
+        <div class="sidebar" id="sidebar">
+            <!-- BOTÓN PARA OCULTAR/MOSTRAR LA BARRA LATERAL -->
+            <button class="toggle-sidebar-btn" onclick="toggleSidebar()" title="Ocultar/Mostrar menú">
+                <i class="fa-solid fa-bars" id="toggle-sidebar-icon"></i>
+            </button>
+
             <div>
                 <div class="brand-header">
                    <i class="fa-solid fa-store"></i>
@@ -750,6 +796,25 @@
     <script>
         var currentRole = 'internal';
  
+        function toggleSidebar() {
+            var sidebar = document.getElementById('sidebar');
+            var icon = document.getElementById('toggle-sidebar-icon');
+            
+            sidebar.classList.toggle('collapsed');
+
+            if (sidebar.classList.contains('collapsed')) {
+                icon.className = 'fa-solid fa-chevron-right';
+            } else {
+                icon.className = 'fa-solid fa-bars';
+            }
+
+            setTimeout(function() {
+                if(map) map.invalidateSize();
+                if(mapWizard) mapWizard.invalidateSize();
+                if(mapVoting) mapVoting.invalidateSize();
+            }, 350);
+        }
+
         function toggleMobileMode(checkbox) {
             if (checkbox.checked) {
                 document.body.classList.add('mobile-mode');
@@ -1212,4 +1277,3 @@
     </script>
 </body>
 </html>
-
