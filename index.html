@@ -292,7 +292,17 @@
         .page-btn { background: #FFF; border: 1px solid var(--border-color); padding: 4px 8px; border-radius: 4px; font-size: 10.5px; font-weight: bold; cursor: pointer; }
         .page-btn:hover { background: #EDF2F7; }
         .battle-pass { display: flex; flex-direction: column; gap: 15px; margin-top: 15px; }
-        .pass-track { display: flex; align-items: center; gap: 18px; overflow-x: auto; padding: 18px 10px; background: #1E1E1E; border-radius: 12px; }
+        .pass-track { 
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+            flex-wrap: wrap; 
+            gap: 18px; 
+            padding: 20px; 
+            background: #1E1E1E; 
+            border-radius: 12px; 
+            width: 100%;
+        }
         .tier-card { min-width: 150px; background: #2D3748; border-radius: 8px; padding: 12px; text-align: center; color: #FFF; position: relative; border: 2px solid #4A5568; }
         .tier-card.unlocked { border-color: var(--accent-green); background: linear-gradient(180deg, #2D3748 0%, #1A202C 100%); }
         .tier-card.claimed { border-color: var(--accent-orange); }
@@ -399,7 +409,7 @@
             <div class="top-navbar" id="top-navbar">
                 <div class="navbar-brand-logo">
                    <img src="logo.png" alt="Logo Expansión On-Demand" class="brand-logo-img">
-                    <div style="font-weight: 600; color: #4A5568;" id="nav-title">Resumen del Punto</div>
+                    <div style="font-weight: 600; color: #4A5568;" id="nav-title">| Resumen del Punto</div>
                 </div>
               
                 <div class="user-profile" onclick="openSSOModal()" title="Haz clic para cambiar de usuario">
@@ -842,10 +852,10 @@
             if(targetBottom) targetBottom.classList.add('active');
           
             var titles = {
-                'dashboard': 'Resumen del Punto',
-                'community': 'Módulo de Captura Comunitaria',
-                'voting': 'Mapa de Propuestas Votadas por la Comunidad',
-                'rewards': 'Programa de Lealtad y Recompensas'
+                'dashboard': ' | Resumen del Punto',
+                'community': ' | Módulo de Captura Comunitaria',
+                'voting': ' | Mapa de Propuestas Votadas por la Comunidad',
+                'rewards': ' | Programa de Lealtad y Recompensas'
             };
             document.getElementById('nav-title').innerText = titles[viewId];
             setTimeout(function() {
@@ -1252,7 +1262,7 @@
                 alert('Por favor carga al menos una fotografía.');
                 return;
             }
-            alert('¡Propuesta enviada con éxito!');
+            alert('¡Propuesta enviada con éxito!: +1,200 puntos Spin obtenidos');
             goToStep(1);
             document.getElementById('wizard-form').reset();
             uploadedPhotos = [];
